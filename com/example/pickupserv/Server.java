@@ -2,6 +2,7 @@ package com.example.pickupserv;
 
 import org.json.*;
 
+import java.awt.*;
 import java.io.*;
 import java.net.*;
 import java.nio.channels.IllegalBlockingModeException;
@@ -292,11 +293,50 @@ public class Server implements Runnable {
     }
 
     private void joinEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        // TODO: WRITE
+        String eventID = is.readLine();
+        if(hostToEvent.containsKey(devId) == ) {
+            os.write("Host can't join event".getBytes());
+            return;
+        }
+        if(!events.containsKey(eventID) || events.get(eventID).members.length == events.get(eventID).currSize ||
+        userToEvent.containsKey(devId)){
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        userToEvent.put(devId, eventID);
+        EventStats eventToJoin = events.get(eventID);
+        eventToJoin.members[eventToJoin.currSize] = eventID;
+        eventToJoin.currSize++;
+        os.write(255);
     }
 
     private void leaveEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        // TODO: WRITE
+        String eventID = is.readLine();
+        if(hostToEvent.containsKey(devId)) {
+            os.write("Host must disband event".getBytes());
+            return;
+        }
+        if(!events.containsKey(eventID) || !userToEvent.containsKey(devId)){
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        if(!userToEvent.get(devId).equals(eventID)) {
+            os.write("User is not in event.".getBytes());
+            return;
+        }
+        EventStats eventToLeave = events.get(eventID);
+        //Delete devID from eventToLeave.members
+        int i = 0;
+        while(eventToLeave[i] != eventID) {
+            i++;
+        }
+        for(int j = i; j < eventToLeave.members.length - 1; j++) {
+            eventToLeave[j] = eventToLeave[j + 1];
+        }
+        eventToLeave.currSize--;
+
+        userToEvent.remove(key)
+        os.write(255);
     }
 
     private void nameSet(String devId, BufferedReader is, OutputStream os) throws Throwable {
