@@ -96,13 +96,16 @@ public class RadarIO {
 
     }
 
-    public void searchGeofences(int limit, Location currLoc, int radius) {
-        String strLocation = currLoc.loc;
+    public ArrayList<> searchGeofences(int limit, Location currLoc, int radius) {
+        String strLocation = currLoc.latlong;
         String strLimit = String.valueOf(limit);
         String strRadius = String.valueOf(radius);
-        JSObject obj = sendRequest("https://api.radar.io/v1/search/geofences", "GET", "&near=" +
+        JSObject obj = sendRequest("https://api.radar.io/v1/search/geofences", "GET", "near=" +
                 location + "&radius=" + radius +
                 "&limit=" + limit);
+        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
+            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+        }
         ArrayList temp = new ArrayList<>();
         for(JSObject geofenceInfo: obj.getJsonObject("geofences")) {
             ArrayList pair = new ArrayList<>();
@@ -112,5 +115,27 @@ public class RadarIO {
         }
         return temp;
     }
+
+    public ArrayList<JSObject> listUsers(String updatedBefore, String updatedAfter) {
+        JSObject obj = sendRequest("https://api.radar.io/v1/users", "GET", "limit=1000" +
+                "&updatedBefore=" + updatedBefore + "&updatedAfter=" + updatedAfter);
+        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
+            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+        }
+
+        return obj.getJsonObject("users");
+    }
+
+    public double getDistance(Location origin, Location destination) {
+        JSObject obj = sendRequest("https://api.radar.io/v1/route/distance", "GET",
+                "origin=" + origin + "&destination=" + destination.latlong + "&units=metric" + "&modes=foot");
+
+        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
+            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+        }
+        double dist = Double.parseDouble(Inteobj.getJsonObject("foot").getJsonObject("distance").getString("value"));
+        return dist;
+    }
+    
 
 }
