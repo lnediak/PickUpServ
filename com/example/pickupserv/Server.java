@@ -22,7 +22,7 @@ public class Server implements Runnable {
     public static void runInBackground() {
         (new Thread(new Runnable() {
             @Override
-            void run() {
+            public void run() {
                 try {
                     Server.listen();
                 } catch (Throwable e) {
@@ -292,50 +292,59 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private void joinEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
+    private synchronized void joinEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
         String eventID = is.readLine();
-        if(hostToEvent.containsKey(devId) == ) {
-            os.write("Host can't join event".getBytes());
+        if (!events.containsKey(eventID)) {
+            os.write("Event does not exist".getBytes());
             return;
         }
-        if(!events.containsKey(eventID) || events.get(eventID).members.length == events.get(eventID).currSize ||
-        userToEvent.containsKey(devId)){
-            os.write("Did not expect EOF".getBytes());
+        if (hostToEvent.containsKey(devId)) {
+            os.write("Error: Host is already hosting an event".getBytes());
+            return;
+        }
+        if (userToEvent.containsKey(devId)) {
+            os.write("Error: Host is already participating in an event".getBytes());
+            return;
+        }
+        if (events.get(eventID).members.length == events.get(eventID).currSize) {
+            os.write("Event capacity full".getBytes());
             return;
         }
         userToEvent.put(devId, eventID);
         EventStats eventToJoin = events.get(eventID);
-        eventToJoin.members[eventToJoin.currSize] = eventID;
-        eventToJoin.currSize++;
+        eventToJoin.members[eventToJoin.currSize++] = eventID;
         os.write(255);
     }
 
-    private void leaveEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
+    private synchronized void leaveEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
         String eventID = is.readLine();
-        if(hostToEvent.containsKey(devId)) {
-            os.write("Host must disband event".getBytes());
+        if (!events.containsKey(eventID)) {
+            os.write("Event does not exist".getBytes());
             return;
         }
-        if(!events.containsKey(eventID) || !userToEvent.containsKey(devId)){
-            os.write("Did not expect EOF".getBytes());
+        if (hostToEvent.containsKey(devId)) {
+            os.write("Host must disband event to leave".getBytes());
             return;
         }
-        if(!userToEvent.get(devId).equals(eventID)) {
-            os.write("User is not in event.".getBytes());
+        if (!userToEvent.containsKey(devId)) {
+            os.write("User is not in any event".getBytes());
+            return;
+        }
+        if (!userToEvent.get(devId).equals(eventID)) {
+            os.write("User is not in specified event".getBytes());
             return;
         }
         EventStats eventToLeave = events.get(eventID);
         //Delete devID from eventToLeave.members
         int i = 0;
-        while(eventToLeave[i] != eventID) {
+        while (i < eventToLeave.currSize && eventToLeave.members[i] != devId) {
             i++;
         }
-        for(int j = i; j < eventToLeave.members.length - 1; j++) {
-            eventToLeave[j] = eventToLeave[j + 1];
+        for (i++; i < eventToLeave.currSize; i++) {
+            eventToLeave.members[i - 1] = eventToLeave.members[i];
         }
         eventToLeave.currSize--;
-
-        userToEvent.remove(key)
+        userToEvent.remove(devId);
         os.write(255);
     }
 
