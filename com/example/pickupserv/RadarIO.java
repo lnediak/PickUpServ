@@ -11,7 +11,7 @@ public class RadarIO {
         public String loc;
 
         Location(JsonObject obj) {
-            loc = obj.getJsonObject("geometry").getString("coordinates");
+            loc = obj.getString("coordinates");
         }
 
     }
