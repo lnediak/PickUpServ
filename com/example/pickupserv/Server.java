@@ -18,6 +18,19 @@ public class Server implements Runnable {
         }
     }
 
+    public static void runInBackground() {
+        (new Thread(new Runnable() {
+            @Override
+            void run() {
+                try {
+                    Server.listen();
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                }
+            }
+        })).run();
+    }
+
     private Socket client;
 
     private static class EventStats {
@@ -25,12 +38,14 @@ public class Server implements Runnable {
         public String host;
         public int currSize;
         public String[] members;
+        public String desc;
         public RadarIO.Location loc;
 
-        EventStats(String host, int capacity, RadarIO.Location loc) {
+        EventStats(String host, int capacity, String desc, RadarIO.Location loc) {
             this.host = host;
             members = new String[capacity];
             currSize = 0;
+            this.desc = desc;
             this.loc = loc;
         }
 
@@ -75,9 +90,9 @@ public class Server implements Runnable {
             for (Object user : usersl) {
                 JSONObject obj = (JSONObject)user;
                 String devId = obj.getString("deviceId");
-                users.put(devId, new UserStats(new RadarIO.Location(obj.getJSONObject("location")), users.contains(devId) ? users.get(devId).username : devId));
-                if (activeUsers.contains(devId)) {
-                    String geoid = hostToEvent.contains(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
+                users.put(devId, new UserStats(new RadarIO.Location(obj.getJSONObject("location")), users.containsKey(devId) ? users.get(devId).username : devId));
+                if (activeUsers.containsKey(devId)) {
+                    String geoid = hostToEvent.containsKey(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
                     JSONArray fences = obj.getJSONArray("geofences");
                     boolean notIn = true;
                     for (Object fence : fences) {
@@ -108,7 +123,7 @@ public class Server implements Runnable {
                 os.write("Did not expect EOF".getBytes());
                 return;
             }
-            if (!users.contains(devId)) {
+            if (!users.containsKey(devId)) {
                 try {
                     Thread.sleep(POLL_DELAY + 10);
                 } catch (InterruptedException e) {
@@ -116,7 +131,7 @@ public class Server implements Runnable {
                 }
             }
             refreshUserInfo();
-            if (!users.contains(devId)) {
+            if (!users.containsKey(devId)) {
                 os.write("User not found".getBytes());
                 return;
             }
@@ -126,7 +141,7 @@ public class Server implements Runnable {
                 createGeofence(devId, is, os);
                 break;
             case 'd':
-                if (!hostToEvent.contains(devId)) {
+                if (!hostToEvent.containsKey(devId)) {
                     os.write("Error: Host is not hosting an event".getBytes());
                     return;
                 }
@@ -139,7 +154,7 @@ public class Server implements Runnable {
                 }
                 events.remove(geoid);
                 activeUsers.remove(devId);
-                os.write(new byte[] {-1});
+                os.write(255);
                 break;
             case 'u':
                 updateParticipantInfo(devId, is, os);
@@ -176,14 +191,6 @@ public class Server implements Runnable {
     }
 
     private void createGeofence(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        if (hostToEvent.contains(devId)) {
-            os.write("Error: Host is already hosting an event".getBytes());
-            return;
-        }
-        if (userToEvent.contains(devId)) {
-            os.write("Error: Host is already participating in an event".getBytes());
-            return;
-        }
         String radiuss = is.readLine();
         int radius;
         try {
@@ -194,11 +201,6 @@ public class Server implements Runnable {
         }
         if (radius < 50 || radius > 500) {
             os.write("Radius out of range".getBytes());
-            return;
-        }
-        String desc = is.readLine();
-        if (desc == null) {
-            os.write("Did not expect EOF".getBytes());
             return;
         }
         String cap = is.readLine();
@@ -217,31 +219,76 @@ public class Server implements Runnable {
             os.write("Capacity out of range".getBytes());
             return;
         }
+        StringBuilder sb = new StringBuilder();
+        char[] buf = new char[8192];
+        int count;
+        while ((count = is.read(buf)) != -1) {
+            sb.append(buf, 0, count);
+        }
+        String desc = sb.toString();
         RadarIO.Location loc = users.get(devId).loc;
-        String geoid = RadarIO.createGeofence(desc, loc, radius);
-        events.put(geoid, new EventStats(devId, capacity, loc));
-        hostToEvent.put(devId, geoid);
-        activeUsers.put(devId, new Double(-1));
-        os.write(new byte[] {-1});
+        synchronized (events) {
+            if (hostToEvent.containsKey(devId)) {
+                os.write("Error: Host is already hosting an event".getBytes());
+                return;
+            }
+            if (userToEvent.containsKey(devId)) {
+                os.write("Error: Host is already participating in an event".getBytes());
+                return;
+            }
+            String geoid = RadarIO.createGeofence(desc, loc, radius);
+            events.put(geoid, new EventStats(devId, capacity, desc, loc));
+            hostToEvent.put(devId, geoid);
+            activeUsers.put(devId, new Double(-1));
+        }
+        os.write(255);
     }
 
-    private void updateParticipantInfo(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        if (!hostToEvent.contains(devId) && !userToEvent.contains(devId)) {
-            os.write("Error: User is not in an event".getBytes());
-        }
-        String geoid = hostToEvent.contains(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
-        EventStats att = events.get(geoid);
+    private void writeUserStats(EventStats att, OutputStream os) throws Throwable {
         os.write((users.get(att.host).username + "\n").getBytes());
         os.write(("" + activeUsers.get(att.host) + "\n").getBytes());
         for (int i = 0; i < att.currSize; i++) {
             os.write((users.get(att.members[i]).username + "\n").getBytes());
             os.write(("" + activeUsers.get(att.host) + "\n").getBytes());
         }
-        os.write(new byte[] {-1});
+    }
+
+    private void updateParticipantInfo(String devId, BufferedReader is, OutputStream os) throws Throwable {
+        if (!hostToEvent.containsKey(devId) && !userToEvent.containsKey(devId)) {
+            os.write("Error: User is not in an event".getBytes());
+            return;
+        }
+        String geoid = hostToEvent.containsKey(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
+        EventStats att = events.get(geoid);
+        writeUserStats(att, os);
+        os.write(255);
     }
 
     private void searchEvents(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        // TODO: WRITE
+        String radS = is.readLine();
+        int radius;
+        try {
+            radius = Integer.parseInt(radS);
+        } catch (NumberFormatException e) {
+            os.write("Radius not an integer".getBytes());
+            return;
+        }
+        if (radius < 100 || radius > 10000) {
+            os.write("Radius out of range".getBytes());
+            return;
+        }
+        ArrayList<String> results = RadarIO.searchGeofences(1000, users.get(devId).loc, radius);
+        for (String geoid : results) {
+            os.write((geoid + "\n").getBytes());
+            EventStats att = events.get(geoid);
+            os.write((att.loc.latlong + "\n").getBytes());
+            os.write(att.desc.getBytes());
+            os.write(254);
+            os.write('\n');
+            writeUserStats(att, os);
+            os.write(254);
+        }
+        os.write(255);
     }
 
     private void joinEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
@@ -258,8 +305,10 @@ public class Server implements Runnable {
             os.write("Did not expect EOF".getBytes());
             return;
         }
-        users.get(devId).username = name;
-        os.write(new byte[] {-1});
+        synchronized (users) {
+            users.get(devId).username = name;
+        }
+        os.write(255);
     }
 
 }

@@ -30,7 +30,7 @@ public class RadarIO {
         }
         HttpsURLConnection conn = (HttpsURLConnection) uurl.openConnection();
         conn.setRequestMethod(type);
-        conn.setRequestProperty("Authorization", "INSERT PRIVATE KEY HERE");
+        conn.setRequestProperty("Authorization", "prj_live_sk_dce415dc7a097e9914b98237ae076deb0d689450");
         conn.setDoInput(true);
         if (type == "POST") {
           conn.setRequestProperty("Content-Length", "" + data.getBytes().length);
