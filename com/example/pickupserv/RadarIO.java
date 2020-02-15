@@ -1,11 +1,11 @@
 package com.example.pickupserv;
 
-import netscape.javascript.JSObject;
+import org.json.*;
 
 import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
-import javax.json.*;
+import javax.net.ssl.*;
 
 public class RadarIO {
 
@@ -14,31 +14,31 @@ public class RadarIO {
         public String loc;
         public String latlong;
 
-        Location(JsonObject obj) {
+        Location(JSONObject obj) {
             loc = obj.getString("coordinates");
             String temp = loc.substring(1, loc.length() - 1);
-            temp = loc.split(",");
-            latlong = temp[1] + "," + temp[0];
+            String[] arr = loc.split(",");
+            latlong = arr[1] + "," + arr[0];
         }
 
     }
 
-    private JsonObject sendRequest(String url, String type, String data) throws MalformedURLException, SocketTimeoutException, JsonParsingException, JsonException, IOException {
+    private static JSONObject sendRequest(String url, String type, String data) throws MalformedURLException, SocketTimeoutException, JSONException, IOException {
         URL uurl = new URL(url);
         if (uurl.getProtocol() != "https") {
-          throw MalformedURLException("URL not HTTPS");
+          throw new MalformedURLException("URL not HTTPS");
         }
-        HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
+        HttpsURLConnection conn = (HttpsURLConnection) uurl.openConnection();
         conn.setRequestMethod(type);
         conn.setRequestProperty("Authorization", "INSERT PRIVATE KEY HERE");
-        conn.setRequestProperty("Content-Length", data.getBytes().length);
-        conn.setUseCaches(false);
         conn.setDoInput(true);
-        conn.setDoOutput(true);
-        conn.getOutputStream().write(data.getBytes());
-        JsonReader jsonr = Json.createReader(conn.getInputStream());
-        JsonObject toreturn = jsonr.readObject();
-        uurl.close();
+        if (type == "POST") {
+          conn.setRequestProperty("Content-Length", "" + data.getBytes().length);
+          conn.setUseCaches(false);
+          conn.setDoOutput(true);
+          conn.getOutputStream().write(data.getBytes());
+        }
+        JSONObject toreturn = new JSONObject(new JSONTokener(conn.getInputStream()));
         return toreturn;
     }
 
@@ -50,21 +50,21 @@ public class RadarIO {
      * @return
      * @throws MalformedURLException
      * @throws SocketTimeoutException
-     * @throws JsonParsingException
-     * @throws JsonException
+     * @throws JSONException
      * @throws IOException
      */
-    public String createGeofence(String desc, Location loc, double radius) throws MalformedURLException,
-            SocketTimeoutException, JsonParsingException, JsonException, IOException {
-        JsonObject obj = sendRequest("https://api.radar.io/v1/geofences", "POST",
+    public static String createGeofence(String desc, Location loc, double radius) throws MalformedURLException,
+            SocketTimeoutException, JSONException, IOException {
+        JSONObject obj = sendRequest("https://api.radar.io/v1/geofences", "POST",
             "description=" + desc
          + "&type=circle"
          + "&coordinates=" + loc.loc
          + "&radius=" + radius);
-        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
-            throw IOException("Radar.io responded with Non-OK response code", obj.getJsonObject("meta").getString("code"));
+        String code = obj.getJSONObject("meta").getString("code");
+        if (!code.startsWith("2")) {
+            throw new IOException("Radar.io responded with Non-OK response code " + code);
         }
-        return obj.getJsonObject("geofence").getString("_id");
+        return obj.getJSONObject("geofence").getString("_id");
     }
 
     /**
@@ -74,67 +74,62 @@ public class RadarIO {
      * @param radius
      * @throws MalformedURLException
      * @throws SocketTimeoutException
-     * @throws JsonParsingException
-     * @throws JsonException
+     * @throws JSONException
      * @throws IOException
      */
-    public void deleteGeofence(String id) throws MalformedURLException,
-            SocketTimeoutException, JsonParsingException, JsonException, IOException {
-        JsonObject obj = sendRequest("https://api.radar.io/v1/geofences/" + id, "DELETE");
-        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
-            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+    public static void deleteGeofence(String id) throws MalformedURLException,
+            SocketTimeoutException, JSONException, IOException {
+        JSONObject obj = sendRequest("https://api.radar.io/v1/geofences/" + id, "DELETE", "");
+        String code = obj.getJSONObject("meta").getString("code");
+        if (!code.startsWith("2")) {
+            throw new IOException("Radar.io responded with Non-OK response code " + code);
         }
     }
 
-    public JsonObject getUser(String deviceId) throws MalformedURLException,
-            SocketTimeoutException, JsonParsingException, JsonException, IOException {
-        JSObject obj = sendRequest("https://api.radar.io/v1/users/" + deviceId, "GET");
-        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
-            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+    public static JSONObject getUser(String deviceId) throws MalformedURLException,
+            SocketTimeoutException, JSONException, IOException {
+        JSONObject obj = sendRequest("https://api.radar.io/v1/users/" + deviceId, "GET", "");
+        String code = obj.getJSONObject("meta").getString("code");
+        if (!code.startsWith("2")) {
+            throw new IOException("Radar.io responded with Non-OK response code " + code);
         }
         return obj;
 
     }
 
-    public ArrayList<> searchGeofences(int limit, Location currLoc, int radius) {
-        String strLocation = currLoc.latlong;
-        String strLimit = String.valueOf(limit);
-        String strRadius = String.valueOf(radius);
-        JSObject obj = sendRequest("https://api.radar.io/v1/search/geofences", "GET", "near=" +
-                location + "&radius=" + radius +
-                "&limit=" + limit);
-        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
-            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+    public static ArrayList<String> searchGeofences(int limit, Location currLoc, int radius) throws Throwable {
+        JSONObject obj = sendRequest("https://api.radar.io/v1/search/geofences?near=" +
+                  currLoc.latlong + "&radius=" + radius +
+                  "&limit=" + limit, "GET", "");
+        String code = obj.getJSONObject("meta").getString("code");
+        if (!code.startsWith("2")) {
+            throw new IOException("Radar.io responded with Non-OK response code " + code);
         }
-        ArrayList temp = new ArrayList<>();
-        for(JSObject geofenceInfo: obj.getJsonObject("geofences")) {
-            ArrayList pair = new ArrayList<>();
-            pair.add(geofenceInfo.getString("_id"));
-            pair.add(geofenceInfo.getString("description"));
-            temp.add(pair);
+        ArrayList<String> temp = new ArrayList<String>();
+        for(Object geofenceInfo : obj.getJSONArray("geofences")) {
+            temp.add(((JSONObject)geofenceInfo).getString("_id"));
         }
         return temp;
     }
 
-    public ArrayList<JSObject> listUsers(String updatedBefore, String updatedAfter) {
-        JSObject obj = sendRequest("https://api.radar.io/v1/users", "GET", "limit=1000" +
-                "&updatedBefore=" + updatedBefore + "&updatedAfter=" + updatedAfter);
-        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
-            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+    public static JSONArray listUsers(String updatedBefore, String updatedAfter) throws Throwable {
+        JSONObject obj = sendRequest("https://api.radar.io/v1/users?limit=1000" +
+                "&updatedBefore=" + updatedBefore + "&updatedAfter=" + updatedAfter, "GET", "");
+        String code = obj.getJSONObject("meta").getString("code");
+        if (!code.startsWith("2")) {
+            throw new IOException("Radar.io responded with Non-OK response code " + code);
         }
-
-        return obj.getJsonObject("users");
+        return obj.getJSONArray("users");
     }
 
-    public double getDistance(Location origin, Location destination) {
-        JSObject obj = sendRequest("https://api.radar.io/v1/route/distance", "GET",
-                "origin=" + origin + "&destination=" + destination.latlong + "&units=metric" + "&modes=foot");
-
-        if (!obj.getJsonObject("meta").getString("code").startsWith("2")) {
-            throw IOException("Radar.io responded with Non-OK response code:", obj.getJsonObject("meta").getString("code"));
+    public static double getDistance(Location origin, Location destination) throws Throwable {
+        JSONObject obj = sendRequest("https://api.radar.io/v1/route/distance?origin=" + origin.latlong
+                               + "&destination=" + destination.latlong + "&units=metric" + "&modes=foot", "GET", "");
+        String code = obj.getJSONObject("meta").getString("code");
+        if (!code.startsWith("2")) {
+            throw new IOException("Radar.io responded with Non-OK response code " + code);
         }
-        double dist = Double.parseDouble(Inteobj.getJsonObject("foot").getJsonObject("distance").getString("value"));
-        return dist;
+        return Double.parseDouble(obj.getJSONObject("foot").getJSONObject("distance").getString("value"));
     }
     
 

@@ -1,5 +1,7 @@
 package com.example.pickupserv;
 
+import org.json.*;
+
 import java.io.*;
 import java.net.*;
 import java.nio.channels.IllegalBlockingModeException;
@@ -59,10 +61,6 @@ public class Server implements Runnable {
         this.client = client;
     }
 
-    private static boolean isDig(int b) {
-        return ('0' <= b) && (b <= '9');
-    }
-
     private final long POLL_DELAY = 1000;
 
     private synchronized void refreshUserInfo() throws Throwable {
@@ -72,17 +70,18 @@ public class Server implements Runnable {
             Date last = new Date(lastRefresh);
             lastRefresh = currTime;
             String updatedAfter = sdf.format(last);
-            JsonArray usersl = RadarIO.listUsers(updatedAfter);
-            for (JsonValue user : usersl) {
-                JsonObject obj = (JsonObject)user;
+            String updatedBefore = sdf.format(new Date(0x0FFFFFFFFFFFFFFFL));
+            JSONArray usersl = RadarIO.listUsers(updatedBefore, updatedAfter);
+            for (Object user : usersl) {
+                JSONObject obj = (JSONObject)user;
                 String devId = obj.getString("deviceId");
-                users.put(devId, new UserStats(new RadarIO.Location(obj.getString("location")), users.contains(devId) ? users.get(devId).username : devId));
+                users.put(devId, new UserStats(new RadarIO.Location(obj.getJSONObject("location")), users.contains(devId) ? users.get(devId).username : devId));
                 if (activeUsers.contains(devId)) {
                     String geoid = hostToEvent.contains(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
-                    JsonArray fences = obj.getJsonArray("geofences");
+                    JSONArray fences = obj.getJSONArray("geofences");
                     boolean notIn = true;
-                    for (JsonValue fence : fences) {
-                        JsonObject fobj = (JsonObject)fence;
+                    for (Object fence : fences) {
+                        JSONObject fobj = (JSONObject)fence;
                         if (fobj.getString("_id").equals(geoid)) {
                             activeUsers.put(devId, new Double(0));
                             notIn = false;
@@ -90,7 +89,7 @@ public class Server implements Runnable {
                         }
                     }
                     if (notIn) {
-                        double dist = RadarIO.dist(users.get(devId), events.get(geoid).loc);
+                        double dist = RadarIO.getDistance(users.get(devId).loc, events.get(geoid).loc);
                         activeUsers.put(devId, new Double(dist));
                     }
                 }
@@ -102,7 +101,7 @@ public class Server implements Runnable {
     public void run() {
         // Requests: create_geofence, destroy_geofence, update_participant_info, search_events, join_event, leave_event, name_set
         try {
-            BufferedReader is = new BufferedReader(client.getInputStream());
+            BufferedReader is = new BufferedReader(new InputStreamReader(client.getInputStream()));
             OutputStream os = client.getOutputStream();
             String devId = is.readLine();
             if (devId == null) {
@@ -112,7 +111,7 @@ public class Server implements Runnable {
             if (!users.contains(devId)) {
                 try {
                     Thread.sleep(POLL_DELAY + 10);
-                } catch (InteruptedException e) {
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
@@ -140,7 +139,7 @@ public class Server implements Runnable {
                 }
                 events.remove(geoid);
                 activeUsers.remove(devId);
-                os.write(new byte[] {255});
+                os.write(new byte[] {-1});
                 break;
             case 'u':
                 updateParticipantInfo(devId, is, os);
@@ -154,6 +153,9 @@ public class Server implements Runnable {
             case 'l':
                 leaveEvent(devId, is, os);
                 break;
+            case 'n':
+                nameSet(devId, is, os);
+                break;
             default:
                 os.write(("Unsupported request" + (char)b).getBytes());
             }
@@ -161,11 +163,15 @@ public class Server implements Runnable {
             try {
                 OutputStream os = client.getOutputStream();
                 os.write(e.toString().getBytes());
-            } catch (Throwable e) {
-                e.printStackTrace();
+            } catch (Throwable ee) {
+                ee.printStackTrace();
             }
         } finally {
-            client.close();
+            try {
+                client.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -202,7 +208,7 @@ public class Server implements Runnable {
         }
         int capacity;
         try {
-            capacity = Integer.parseInt(capacity);
+            capacity = Integer.parseInt(cap);
         } catch (NumberFormatException e) {
             os.write("Capacity not an integer".getBytes());
             return;
@@ -211,12 +217,12 @@ public class Server implements Runnable {
             os.write("Capacity out of range".getBytes());
             return;
         }
-        RadarIO.Location loc = users.get(devId);
+        RadarIO.Location loc = users.get(devId).loc;
         String geoid = RadarIO.createGeofence(desc, loc, radius);
         events.put(geoid, new EventStats(devId, capacity, loc));
         hostToEvent.put(devId, geoid);
         activeUsers.put(devId, new Double(-1));
-        os.write(new byte[] {255});
+        os.write(new byte[] {-1});
     }
 
     private void updateParticipantInfo(String devId, BufferedReader is, OutputStream os) throws Throwable {
@@ -231,7 +237,7 @@ public class Server implements Runnable {
             os.write((users.get(att.members[i]).username + "\n").getBytes());
             os.write(("" + activeUsers.get(att.host) + "\n").getBytes());
         }
-        os.write(new byte[] {255});
+        os.write(new byte[] {-1});
     }
 
     private void searchEvents(String devId, BufferedReader is, OutputStream os) throws Throwable {
@@ -244,6 +250,16 @@ public class Server implements Runnable {
 
     private void leaveEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
         // TODO: WRITE
+    }
+
+    private void nameSet(String devId, BufferedReader is, OutputStream os) throws Throwable {
+        String name = is.readLine();
+        if (name == null) {
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        users.get(devId).username = name;
+        os.write(new byte[] {-1});
     }
 
 }
