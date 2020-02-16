@@ -98,11 +98,10 @@ public class Server implements Runnable {
             Date last = new Date(lastRefresh);
             lastRefresh = currTime;
             String updatedAfter = sdf.format(last);
-            String updatedBefore = sdf.format(new Date(0x0FFFFFFFFFFFFFFFL));
-            JSONArray usersl = RadarIO.listUsers(updatedBefore, updatedAfter);
+            JSONArray usersl = RadarIO.listUsers(updatedAfter);
             for (Object user : usersl) {
                 JSONObject obj = (JSONObject)user;
-                String devId = obj.getString("deviceId");
+                String devId = obj.get("deviceId").toString();
                 users.put(devId, new UserStats(new RadarIO.Location(obj.getJSONObject("location")), users.containsKey(devId) ? users.get(devId).username : devId));
                 if (activeUsers.containsKey(devId)) {
                     String geoid = hostToEvent.containsKey(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
@@ -110,7 +109,7 @@ public class Server implements Runnable {
                     boolean notIn = true;
                     for (Object fence : fences) {
                         JSONObject fobj = (JSONObject)fence;
-                        if (fobj.getString("_id").equals(geoid)) {
+                        if (fobj.get("_id").toString().equals(geoid)) {
                             activeUsers.put(devId, new Double(0));
                             notIn = false;
                             break;
@@ -146,6 +145,7 @@ public class Server implements Runnable {
             refreshUserInfo();
             if (!users.containsKey(devId)) {
                 os.write("User not found".getBytes());
+                System.out.println("Poop");
                 return;
             }
             int b = is.read();
