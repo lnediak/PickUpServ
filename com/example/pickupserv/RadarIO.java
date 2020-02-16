@@ -26,11 +26,12 @@ public class RadarIO {
         return URLEncoder.encode(str, "UTF-8");
     }
 
-    private static JSONObject sendRequest(String url, String type, String data) throws MalformedURLException, SocketTimeoutException, JSONException, IOException {
+    private static JSONObject sendRequest(String url, String type, String data, boolean isSecret) throws MalformedURLException, SocketTimeoutException, JSONException, IOException {
         URL uurl = new URL(url);
         HttpURLConnection conn = (HttpURLConnection) uurl.openConnection();
         conn.setRequestMethod(type);
-        conn.setRequestProperty("Authorization", en("prj_live_sk_dce415dc7a097e9914b98237ae076deb0d689450"));
+        String authKey = isSecret? en("prj_live_sk_dce415dc7a097e9914b98237ae076deb0d689450") : en("prj_live_pk_598126e8bc2d50f1da77cf8261a9255c9c7d63fc");
+        conn.setRequestProperty("Authorization", authKey);
         conn.setRequestProperty("User-Agent", "curl/7.58.0");
         if (type.equals("POST")) {
             data = en(data);
@@ -79,7 +80,7 @@ public class RadarIO {
             "description=" + desc
          + "&type=circle"
          + "&coordinates=" + loc.loc
-         + "&radius=" + radius);
+         + "&radius=" + radius, true);
         String code = obj.getJSONObject("meta").get("code").toString();
         if (!code.startsWith("2")) {
             throw new IOException("Radar.io responded with Non-OK response code " + code);
@@ -99,7 +100,7 @@ public class RadarIO {
      */
     public static void deleteGeofence(String id) throws MalformedURLException,
             SocketTimeoutException, JSONException, IOException {
-        JSONObject obj = sendRequest("https://api.radar.io/v1/geofences/" + en(id), "DELETE", "");
+        JSONObject obj = sendRequest("https://api.radar.io/v1/geofences/" + en(id), "DELETE", "", true);
         String code = obj.getJSONObject("meta").get("code").toString();
         if (!code.startsWith("2")) {
             throw new IOException("Radar.io responded with Non-OK response code " + code);
@@ -108,7 +109,7 @@ public class RadarIO {
 
     public static JSONObject getUser(String deviceId) throws MalformedURLException,
             SocketTimeoutException, JSONException, IOException {
-        JSONObject obj = sendRequest("https://api.radar.io/v1/users/" + en(deviceId), "GET", "");
+        JSONObject obj = sendRequest("https://api.radar.io/v1/users/" + en(deviceId), "GET", "", true);
         String code = obj.getJSONObject("meta").get("code").toString();
         if (!code.startsWith("2")) {
             throw new IOException("Radar.io responded with Non-OK response code " + code);
@@ -120,7 +121,7 @@ public class RadarIO {
     public static ArrayList<String> searchGeofences(int limit, Location currLoc, int radius) throws Throwable {
         JSONObject obj = sendRequest("https://api.radar.io/v1/search/geofences?near=" +
                   en(currLoc.latlong) + "&radius=" + radius +
-                  "&limit=" + limit, "GET", "");
+                  "&limit=" + limit, "GET", "", false);
         String code = obj.getJSONObject("meta").get("code").toString();
         if (!code.startsWith("2")) {
             throw new IOException("Radar.io responded with Non-OK response code " + code);
@@ -133,7 +134,7 @@ public class RadarIO {
     }
 
     public static JSONArray listUsers(String updatedAfter) throws Throwable {
-        JSONObject obj = sendRequest("https://api.radar.io/v1/users?limit=1000", "GET", "");
+        JSONObject obj = sendRequest("https://api.radar.io/v1/users?limit=1000", "GET", "", true);
         String code = obj.getJSONObject("meta").get("code").toString();
         if (!code.startsWith("2")) {
             throw new IOException("Radar.io responded with Non-OK response code " + code);
@@ -143,7 +144,7 @@ public class RadarIO {
 
     public static double getDistance(Location origin, Location destination) throws Throwable {
         JSONObject obj = sendRequest("https://api.radar.io/v1/route/distance?origin=" + en(origin.latlong)
-                               + "&destination=" + en(destination.latlong) + "&units=metric" + "&modes=foot", "GET", "");
+                               + "&destination=" + en(destination.latlong) + "&units=metric" + "&modes=foot", "GET", "", false);
         String code = obj.getJSONObject("meta").get("code").toString();
         if (!code.startsWith("2")) {
             throw new IOException("Radar.io responded with Non-OK response code " + code);
