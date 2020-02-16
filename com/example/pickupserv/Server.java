@@ -73,6 +73,18 @@ public class Server implements Runnable {
 
     private static ConcurrentHashMap<String, UserStats> users;
 
+    private String readLine(InputStream is) throws IOException {
+        int c;
+        StringBuilder sb = new StringBuilder();
+        while ((c = is.read()) != -1 && c != '\n') {
+            sb.append((char)c);
+        }
+        if (c == -1 && sb.length() == 0) {
+            return null;
+        }
+        return sb.toString();
+    }
+
     Server(Socket client) {
         this.client = client;
     }
@@ -117,9 +129,9 @@ public class Server implements Runnable {
     public void run() {
         // Requests: create_geofence, destroy_geofence, update_participant_info, search_events, join_event, leave_event, name_set
         try {
-            BufferedReader is = new BufferedReader(new InputStreamReader(client.getInputStream()));
+            InputStream is = client.getInputStream();
             OutputStream os = client.getOutputStream();
-            String devId = is.readLine();
+            String devId = readLine(is);
             if (devId == null) {
                 os.write("Did not expect EOF".getBytes());
                 return;
@@ -191,8 +203,8 @@ public class Server implements Runnable {
         }
     }
 
-    private void createGeofence(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        String radiuss = is.readLine();
+    private void createGeofence(String devId, InputStream is, OutputStream os) throws Throwable {
+        String radiuss = readLine(is);
         int radius;
         try {
             radius = Integer.parseInt(radiuss);
@@ -204,7 +216,7 @@ public class Server implements Runnable {
             os.write("Radius out of range".getBytes());
             return;
         }
-        String cap = is.readLine();
+        String cap = readLine(is);
         if (cap == null) {
             os.write("Did not expect EOF".getBytes());
             return;
@@ -221,10 +233,10 @@ public class Server implements Runnable {
             return;
         }
         StringBuilder sb = new StringBuilder();
-        char[] buf = new char[8192];
+        byte[] buf = new byte[8192];
         int count;
         while ((count = is.read(buf)) != -1) {
-            sb.append(buf, 0, count);
+            sb.append(new String(buf), 0, count);
         }
         String desc = sb.toString();
         RadarIO.Location loc = users.get(devId).loc;
@@ -254,7 +266,7 @@ public class Server implements Runnable {
         }
     }
 
-    private void updateParticipantInfo(String devId, BufferedReader is, OutputStream os) throws Throwable {
+    private void updateParticipantInfo(String devId, InputStream is, OutputStream os) throws Throwable {
         os.write((users.get(devId).loc.latlong + "\n").getBytes());
         if (!hostToEvent.containsKey(devId) && !userToEvent.containsKey(devId)) {
             return;
@@ -265,8 +277,8 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private void searchEvents(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        String radS = is.readLine();
+    private void searchEvents(String devId, InputStream is, OutputStream os) throws Throwable {
+        String radS = readLine(is);
         int radius;
         try {
             radius = Integer.parseInt(radS);
@@ -293,8 +305,8 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private synchronized void joinEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        String eventID = is.readLine();
+    private synchronized void joinEvent(String devId, InputStream is, OutputStream os) throws Throwable {
+        String eventID = readLine(is);
         if (!events.containsKey(eventID)) {
             os.write("Event does not exist".getBytes());
             return;
@@ -318,8 +330,8 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private synchronized void leaveEvent(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        String eventID = is.readLine();
+    private synchronized void leaveEvent(String devId, InputStream is, OutputStream os) throws Throwable {
+        String eventID = readLine(is);
         if (!events.containsKey(eventID)) {
             os.write("Event does not exist".getBytes());
             return;
@@ -351,8 +363,8 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private void nameSet(String devId, BufferedReader is, OutputStream os) throws Throwable {
-        String name = is.readLine();
+    private void nameSet(String devId, InputStream is, OutputStream os) throws Throwable {
+        String name = readLine(is);
         if (name == null) {
             os.write("Did not expect EOF".getBytes());
             return;
