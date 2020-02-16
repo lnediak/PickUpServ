@@ -25,18 +25,19 @@ public class RadarIO {
 
     private static JSONObject sendRequest(String url, String type, String data) throws MalformedURLException, SocketTimeoutException, JSONException, IOException {
         URL uurl = new URL(url);
-        if (uurl.getProtocol() != "https") {
-          throw new MalformedURLException("URL not HTTPS");
+        if (!uurl.getProtocol().equals("https")) {
+            System.out.println(uurl.getProtocol());
+            throw new MalformedURLException("URL not HTTPS");
         }
         HttpsURLConnection conn = (HttpsURLConnection) uurl.openConnection();
         conn.setRequestMethod(type);
         conn.setRequestProperty("Authorization", "prj_live_sk_dce415dc7a097e9914b98237ae076deb0d689450");
         conn.setDoInput(true);
         if (type == "POST") {
-          conn.setRequestProperty("Content-Length", "" + data.getBytes().length);
-          conn.setUseCaches(false);
-          conn.setDoOutput(true);
-          conn.getOutputStream().write(data.getBytes());
+            conn.setRequestProperty("Content-Length", "" + data.getBytes().length);
+            conn.setUseCaches(false);
+            conn.setDoOutput(true);
+            conn.getOutputStream().write(data.getBytes());
         }
         JSONObject toreturn = new JSONObject(new JSONTokener(conn.getInputStream()));
         return toreturn;

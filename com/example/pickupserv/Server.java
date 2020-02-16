@@ -52,12 +52,12 @@ public class Server implements Runnable {
 
     }
 
-    private static ConcurrentHashMap<String, EventStats> events;
-    private static ConcurrentHashMap<String, String> hostToEvent;
-    private static ConcurrentHashMap<String, String> userToEvent;
+    private static ConcurrentHashMap<String, EventStats> events = new ConcurrentHashMap<String, EventStats>();
+    private static ConcurrentHashMap<String, String> hostToEvent = new ConcurrentHashMap<String, String>();
+    private static ConcurrentHashMap<String, String> userToEvent = new ConcurrentHashMap<String, String>();
 
     private static long lastRefresh;
-    private static ConcurrentHashMap<String, Double> activeUsers;
+    private static ConcurrentHashMap<String, Double> activeUsers = new ConcurrentHashMap<String, Double>();
 
     private static class UserStats {
 
@@ -71,7 +71,7 @@ public class Server implements Runnable {
 
     }
 
-    private static ConcurrentHashMap<String, UserStats> users;
+    private static ConcurrentHashMap<String, UserStats> users = new ConcurrentHashMap<String, UserStats>();
 
     private String readLine(InputStream is) throws IOException {
         int c;
@@ -214,6 +214,11 @@ public class Server implements Runnable {
             }
         } finally {
             try {
+                byte[] buf = new byte[8192];
+                client.getOutputStream().flush();
+                client.shutdownOutput();
+                InputStream is = client.getInputStream();
+                while (is.read(buf) != -1) {}
                 client.close();
             } catch (IOException e) {
                 e.printStackTrace();
