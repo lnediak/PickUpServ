@@ -149,9 +149,27 @@ public class Server implements Runnable {
                 return;
             }
             int b = is.read();
+            String str = readLine(is);
+            int clen;
+            try {
+                clen = Integer.parseInt(str);
+            } catch (NumberFormatException e) {
+                os.write("Content-length is not integer".getBytes());
+                return;
+            }
+            String[] fullIn = new String[0];
+            if (clen > 0) {
+                byte[] buf = new byte[clen];
+                int off = 0;
+                int cou;
+                while (off + (cou = is.read(buf, off, clen - off)) < clen) {
+                    off += cou;
+                }
+                fullIn = (new String(buf)).split("\n");
+            }
             switch (b) {
             case 'c':
-                createGeofence(devId, is, os);
+                createGeofence(devId, fullIn, os);
                 break;
             case 'd':
                 if (!hostToEvent.containsKey(devId)) {
@@ -170,19 +188,19 @@ public class Server implements Runnable {
                 os.write(255);
                 break;
             case 'u':
-                updateParticipantInfo(devId, is, os);
+                updateParticipantInfo(devId, fullIn, os);
                 break;
             case 's':
-                searchEvents(devId, is, os);
+                searchEvents(devId, fullIn, os);
                 break;
             case 'j':
-                joinEvent(devId, is, os);
+                joinEvent(devId, fullIn, os);
                 break;
             case 'l':
-                leaveEvent(devId, is, os);
+                leaveEvent(devId, fullIn, os);
                 break;
             case 'n':
-                nameSet(devId, is, os);
+                nameSet(devId, fullIn, os);
                 break;
             default:
                 os.write(("Unsupported request" + (char)b).getBytes());
@@ -203,8 +221,12 @@ public class Server implements Runnable {
         }
     }
 
-    private void createGeofence(String devId, InputStream is, OutputStream os) throws Throwable {
-        String radiuss = readLine(is);
+    private void createGeofence(String devId, String[] fullIn, OutputStream os) throws Throwable {
+        if (fullIn.length < 3) {
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        String radiuss = fullIn[0];
         int radius;
         try {
             radius = Integer.parseInt(radiuss);
@@ -216,11 +238,7 @@ public class Server implements Runnable {
             os.write("Radius out of range".getBytes());
             return;
         }
-        String cap = readLine(is);
-        if (cap == null) {
-            os.write("Did not expect EOF".getBytes());
-            return;
-        }
+        String cap = fullIn[1];
         int capacity;
         try {
             capacity = Integer.parseInt(cap);
@@ -233,10 +251,8 @@ public class Server implements Runnable {
             return;
         }
         StringBuilder sb = new StringBuilder();
-        byte[] buf = new byte[8192];
-        int count;
-        while ((count = is.read(buf)) != -1) {
-            sb.append(new String(buf), 0, count);
+        for (int i = 2; i < fullIn.length; i++) {
+            sb.append(fullIn[i]);
         }
         String desc = sb.toString();
         RadarIO.Location loc = users.get(devId).loc;
@@ -266,7 +282,7 @@ public class Server implements Runnable {
         }
     }
 
-    private void updateParticipantInfo(String devId, InputStream is, OutputStream os) throws Throwable {
+    private void updateParticipantInfo(String devId, String[] fullIn, OutputStream os) throws Throwable {
         os.write((users.get(devId).loc.latlong + "\n").getBytes());
         if (!hostToEvent.containsKey(devId) && !userToEvent.containsKey(devId)) {
             return;
@@ -277,8 +293,12 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private void searchEvents(String devId, InputStream is, OutputStream os) throws Throwable {
-        String radS = readLine(is);
+    private void searchEvents(String devId, String[] fullIn, OutputStream os) throws Throwable {
+        if (fullIn.length < 1) {
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        String radS = fullIn[0];
         int radius;
         try {
             radius = Integer.parseInt(radS);
@@ -305,8 +325,12 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private synchronized void joinEvent(String devId, InputStream is, OutputStream os) throws Throwable {
-        String eventID = readLine(is);
+    private synchronized void joinEvent(String devId, String[] fullIn, OutputStream os) throws Throwable {
+        if (fullIn.length < 1) {
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        String eventID = fullIn[0];
         if (!events.containsKey(eventID)) {
             os.write("Event does not exist".getBytes());
             return;
@@ -330,8 +354,12 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private synchronized void leaveEvent(String devId, InputStream is, OutputStream os) throws Throwable {
-        String eventID = readLine(is);
+    private synchronized void leaveEvent(String devId, String[] fullIn, OutputStream os) throws Throwable {
+        if (fullIn.length < 1) {
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        String eventID = fullIn[0];
         if (!events.containsKey(eventID)) {
             os.write("Event does not exist".getBytes());
             return;
@@ -363,8 +391,12 @@ public class Server implements Runnable {
         os.write(255);
     }
 
-    private void nameSet(String devId, InputStream is, OutputStream os) throws Throwable {
-        String name = readLine(is);
+    private void nameSet(String devId, String[] fullIn, OutputStream os) throws Throwable {
+        if (fullIn.length < 1) {
+            os.write("Did not expect EOF".getBytes());
+            return;
+        }
+        String name = fullIn[0];
         if (name == null) {
             os.write("Did not expect EOF".getBytes());
             return;
