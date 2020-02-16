@@ -255,8 +255,8 @@ public class Server implements Runnable {
     }
 
     private void updateParticipantInfo(String devId, BufferedReader is, OutputStream os) throws Throwable {
+        os.write((users.get(devId).loc.latlong + "\n").getBytes());
         if (!hostToEvent.containsKey(devId) && !userToEvent.containsKey(devId)) {
-            os.write("Error: User is not in an event".getBytes());
             return;
         }
         String geoid = hostToEvent.containsKey(devId) ? hostToEvent.get(devId) : userToEvent.get(devId);
@@ -288,6 +288,7 @@ public class Server implements Runnable {
             os.write('\n');
             writeUserStats(att, os);
             os.write(254);
+            os.write('\n');
         }
         os.write(255);
     }
@@ -313,6 +314,7 @@ public class Server implements Runnable {
         userToEvent.put(devId, eventID);
         EventStats eventToJoin = events.get(eventID);
         eventToJoin.members[eventToJoin.currSize++] = eventID;
+        activeUsers.put(devId, new Double(-1));
         os.write(255);
     }
 
@@ -345,6 +347,7 @@ public class Server implements Runnable {
         }
         eventToLeave.currSize--;
         userToEvent.remove(devId);
+        activeUsers.remove(devId);
         os.write(255);
     }
 
@@ -354,7 +357,18 @@ public class Server implements Runnable {
             os.write("Did not expect EOF".getBytes());
             return;
         }
-        synchronized (users) {
+        if (name.contains("\n") || name.contains("\r")) {
+            os.write("Name cannot use newline characters".getBytes());
+            return;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c == 254 || c == 255) {
+                os.write("Invalid characters in username".getBytes());
+                return;
+            }
+        }
+        synchronized (events) {
             users.get(devId).username = name;
         }
         os.write(255);
